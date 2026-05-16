@@ -11,6 +11,7 @@ import hmac
 import http
 import json
 import mimetypes
+import os
 import re
 import secrets
 import shutil
@@ -198,6 +199,26 @@ def _resolve_bootstrap_model_name(
                 if stripped:
                     return stripped
     return _default_model_name_from_config()
+
+
+def _read_peers() -> list[dict[str, Any]] | None:
+    """Read multi-instance peer roster from ``NANOBOT_PEER_*`` env vars.
+
+    Each env var value must be JSON with at least ``id``, ``gateway_port``,
+    and ``ws_port`` fields.  Returns ``None`` when no peers are configured
+    (single-instance mode).
+    """
+    peers = []
+    for key, value in sorted(os.environ.items()):
+        if not key.startswith("NANOBOT_PEER_"):
+            continue
+        try:
+            peer = json.loads(value)
+            if isinstance(peer, dict):
+                peers.append(peer)
+        except (json.JSONDecodeError, ValueError):
+            logger.debug("webui bootstrap: failed to parse peer env {}", key)
+    return peers or None
 
 
 def _parse_request_path(path_with_query: str) -> tuple[str, dict[str, list[str]]]:
@@ -753,6 +774,7 @@ class WebSocketChannel(BaseChannel):
                 "ws_path": self._expected_path(),
                 "expires_in": self.config.token_ttl_s,
                 "model_name": _resolve_bootstrap_model_name(self._runtime_model_name),
+                "peers": _read_peers(),
             }
         )
 
