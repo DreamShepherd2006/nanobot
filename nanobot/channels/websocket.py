@@ -9,6 +9,7 @@ import email.utils
 import hashlib
 import hmac
 import http
+import ipaddress
 import json
 import mimetypes
 import re
@@ -90,6 +91,15 @@ class WebSocketConfig(Base):
     token_issue_secret: str = ""
     token_ttl_s: int = Field(default=300, ge=30, le=86_400)
     websocket_requires_token: bool = True
+    bootstrap_allow_from: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Network prefixes (CIDR or single IP) that can access /webui/bootstrap "
+            "without a configured token_issue_secret or static token. "
+            'Example: ["172.16.0.0/12", "192.168.0.1"]. '
+            "Leave empty for localhost-only (default)."
+        ),
+    )
     allow_from: list[str] = Field(default_factory=lambda: ["*"])
     streaming: bool = True
     # Default 36 MB, upper 40 MB: supports up to 4 images at ~6 MB each after
@@ -361,6 +371,36 @@ def _is_localhost(connection: Any) -> bool:
     if host.startswith("::ffff:"):
         host = host[7:]
     return host in _LOCALHOSTS
+
+
+def _remote_ip_in_cidrs(connection: Any, cidrs: list[str]) -> bool:
+    """Return True if the connection's remote IP matches any CIDR/network prefix.
+
+    Handles both IPv4 and IPv6 addresses, including ``::ffff:`` mapped forms.
+    Invalid entries in *cidrs* are silently skipped.
+    """
+    if not cidrs:
+        return False
+    addr = getattr(connection, "remote_address", None)
+    if not addr:
+        return False
+    host = addr[0] if isinstance(addr, tuple) else addr
+    if not isinstance(host, str):
+        return False
+    if host.startswith("::ffff:"):
+        host = host[7:]
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    for cidr in cidrs:
+        try:
+            net = ipaddress.ip_network(cidr, strict=False)
+        except ValueError:
+            continue
+        if ip in net:
+            return True
+    return False
 
 
 def _http_response(
@@ -727,8 +767,10 @@ class WebSocketChannel(BaseChannel):
             if not _issue_route_secret_matches(request.headers, secret):
                 return _http_error(401, "Unauthorized")
         elif not _is_localhost(connection):
-            # No secret configured: only allow localhost (local dev mode).
-            return _http_error(403, "bootstrap is localhost-only")
+            # No secret configured: allow localhost, loopback, and any
+            # IP/CIDR prefix listed in bootstrap_allow_from.
+            if not _remote_ip_in_cidrs(connection, self.config.bootstrap_allow_from):
+                return _http_error(403, "bootstrap is localhost-only")
         # Cap outstanding tokens to avoid runaway growth from a misbehaving client.
         self._purge_expired_issued_tokens()
         self._purge_expired_api_tokens()
