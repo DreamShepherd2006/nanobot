@@ -1,0 +1,54 @@
+# ============================================================
+# Dockerfile.squad — 参考实现，非官方 Dockerfile
+# 展示如何在单容器内运行多个协作的 nanobot Agent
+# ============================================================
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+# --- 基础工具 ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates git nodejs npm && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# --- 安装 nanobot ---
+COPY pyproject.toml README.md LICENSE ./
+RUN mkdir -p nanobot bridge && touch nanobot/__init__.py && \
+    uv pip install --system --no-cache ".[matrix]"
+COPY nanobot/ nanobot/
+COPY bridge/ bridge/
+COPY webui/ webui/
+RUN uv pip install --system --no-cache ".[matrix]"
+
+# --- 安装 Squad 运行时依赖 ---
+RUN uv pip install --system --no-cache \
+    fastapi uvicorn websockets authlib httpx itsdangerous
+
+# --- ⚡ Squad 补丁注入 ---
+# 顺序：内核补丁 → WebUI 补丁
+COPY contrib/legion/patch_squad_error_events.py /tmp/
+RUN python3 /tmp/patch_squad_error_events.py
+
+WORKDIR /app/webui
+COPY contrib/legion/patch_legion_v4_client.py /tmp/
+COPY contrib/legion/patch_legion_v6_sidebar.py /tmp/
+RUN python3 /tmp/patch_legion_v4_client.py && \
+    python3 /tmp/patch_legion_v6_sidebar.py && \
+    npm install && npm run build
+
+# --- Squad 胶水层 ---
+WORKDIR /app
+COPY contrib/legion/gatekeeper.py ./
+COPY contrib/legion/squad_bridge.py ./
+RUN chmod +x gatekeeper.py squad_bridge.py
+
+# --- 运行时 ---
+EXPOSE 7860
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# 启动流程 (示意):
+# 1. squad_config_sync.py 从模板生成各 Agent 配置
+# 2. 并行启动所有 Agent 进程
+# 3. 启动 Gatekeeper 作为统一入口
+# 详见 nanobot-legion 仓库的 entrypoint.sh
+CMD ["python3", "gatekeeper.py"]
