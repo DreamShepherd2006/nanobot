@@ -415,16 +415,16 @@ class OpenAICompatProvider(LLMProvider):
         return "{}"
 
     @staticmethod
-    def _coerce_content_to_string(content: Any) -> str:
+    def _coerce_content_to_string(content: Any) -> str | None:
         """Coerce block/list content into plain text for strict string-only APIs.
 
-        Returns a non-empty string, never None or "(empty)", to satisfy
-        strict string-only APIs (e.g. DeepSeek) that reject null/empty content.
+        Returns a string (possibly a single space for empty/null content), or
+        None when content is None and the caller should decide the default.
         """
         if content is None:
-            return " "
+            return None
         if isinstance(content, str):
-            return content if content != "(empty)" else " "
+            return content if content else " "
         text = OpenAICompatProvider._extract_text_content(content)
         if isinstance(text, str) and text:
             return text
@@ -439,6 +439,7 @@ class OpenAICompatProvider(LLMProvider):
         sanitized = LLMProvider._sanitize_request_messages(messages, _ALLOWED_MSG_KEYS)
         id_map: dict[str, str] = {}
         force_string_content = bool(self._spec and self._spec.name == "deepseek")
+        preserve_content = bool(self._spec and self._spec.preserve_content_with_tool_calls)
 
         def map_id(value: Any) -> Any:
             if not isinstance(value, str):
@@ -466,17 +467,19 @@ class OpenAICompatProvider(LLMProvider):
                         tc_clean["function"] = function_clean
                     normalized.append(tc_clean)
                 clean["tool_calls"] = normalized
-                if clean.get("role") == "assistant" and not force_string_content:
+                if clean.get("role") == "assistant" and not preserve_content:
                     # Some OpenAI-compatible gateways reject assistant messages
-                    # that mix non-empty content with tool_calls.
-                    # Exempt strict string-only APIs (force_string_content):
-                    # preserve content text for user experience (e.g. "Let me
-                    # check that for you" alongside a tool call).
+                    # that mix non-empty content with tool_calls unless the
+                    # provider spec explicitly opts in (preserve_content_with_tool_calls).
+                    # DeepSeek (preserve_content=True) accepts content alongside
+                    # tool_calls, preserving the natural-language preface for
+                    # better end-user experience.
                     clean["content"] = None
             if "tool_call_id" in clean and clean["tool_call_id"]:
                 clean["tool_call_id"] = map_id(clean["tool_call_id"])
             if force_string_content:
-                clean["content"] = self._coerce_content_to_string(clean.get("content"))
+                content = self._coerce_content_to_string(clean.get("content"))
+                clean["content"] = content if content is not None else " "
         return self._enforce_role_alternation(sanitized)
 
     # ------------------------------------------------------------------
