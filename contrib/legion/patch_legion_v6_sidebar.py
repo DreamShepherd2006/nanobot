@@ -45,6 +45,7 @@ type AgentStatus = "online" | "offline" | "executing" | "blocked" | "disconnecte
 function LegionRoster(props: {
   peers: Record<string, { id: string; name?: string }>;
   status: Record<string, string>;
+  version?: string;
   onToggleConsole?: () => void;
 }) {
   const agents = Object.keys(props.peers).sort();
@@ -56,7 +57,7 @@ function LegionRoster(props: {
       title="点击切换军团指挥中心"
     >
       <span className="text-[11px] text-muted-foreground/60 tracking-wider font-semibold">
-        军团
+        军团{props.version ? ` · v${props.version}` : ""}
       </span>
       {agents.map((key) => {
         const peer = props.peers[key] || { id: key };
@@ -96,6 +97,7 @@ function LegionTerminal(props: {{
   activeTab: string;
   setActiveTab: (t: string) => void;
   tabs: string[];
+  version?: string;
   onClose: () => void;
 }}) {{
   if (!props.show) return null;
@@ -113,7 +115,7 @@ function LegionTerminal(props: {{
         <div className="flex items-center gap-2">
           <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-xs font-semibold text-foreground/80 tracking-wide">
-            军团指挥中心
+            军团指挥中心{{props.version ? ` · v${{props.version}}` : ""}}
           </span>
           <span className="text-[10px] text-muted-foreground/60">
             {{props.logs.all?.length || 0}} 条记录
@@ -179,6 +181,7 @@ SIDEBAR_STATE = """
   const [activeTab, setActiveTab] = useState("all");
   const [legionPeers, setLegionPeers] = useState<Record<string, { id: string; name?: string }>>({});
   const [legionStatus, setLegionStatus] = useState<Record<string, string>>({});
+  const [nanobotVersion, setNanobotVersion] = useState<string>("...");
 
   /* derive logs + tabs dynamically */
   const agentIds = Object.keys(legionPeers).sort();
@@ -214,6 +217,8 @@ SIDEBAR_STATE = """
           return next;
         });
         if (data) setLegionStatus(data);
+        const ver = (ev as any).nanobot_version;
+        if (ver && typeof ver === "string") setNanobotVersion(ver);
 
         /* Per-agent status lines */
         if (data) {
@@ -256,6 +261,7 @@ TERMINAL_RENDER = """
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         tabs={allTabs}
+        version={nanobotVersion}
         onClose={() => setShowConsole(false)}
       />
 """
@@ -336,7 +342,7 @@ def patch_sidebar():
     # ── Injection 6: <LegionRoster /> between logo header and search area ──
     if "<LegionRoster " not in content:
         legion_roster_jsx = (
-            '      <LegionRoster peers={legionPeers} status={legionStatus} onToggleConsole={() => setShowConsole(v => !v)} />'
+            '      <LegionRoster peers={legionPeers} status={legionStatus} version={nanobotVersion} onToggleConsole={() => setShowConsole(v => !v)} />'
         )
         # Primary anchor: this line opens the search block div
         anchor_search_div = '      <div className="space-y-1.5 px-2 pb-2">'
