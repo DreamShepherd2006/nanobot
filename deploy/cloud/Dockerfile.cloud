@@ -1,0 +1,50 @@
+# ============================================================================
+# Dockerfile.cloud — nanobot cloud-space deployment (HF Spaces / ModelScope)
+# ============================================================================
+# Multi-platform Docker image for running nanobot on cloud platforms.
+# Platform detection (via deploy/cloud/platforms/) selects the right
+# filesystem paths and OAuth provider at startup.
+#
+# Build:  docker build -f deploy/cloud/Dockerfile.cloud -t nanobot-cloud .
+# Run:    docker run -p 7860:7860 -e HF_SPACE=1 -v ./data:/data nanobot-cloud
+# ============================================================================
+
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+# ── 1. System dependencies ────────────────────────────────────────
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ── 2. Install nanobot (metadata-only layer for cache) ────────────
+COPY pyproject.toml README.md LICENSE hatch_build.py ./
+RUN mkdir -p nanobot bridge && \
+    touch nanobot/__init__.py && \
+    uv pip install --system --no-cache ".[matrix]" && \
+    rm -rf nanobot bridge
+
+# ── 3. Copy nanobot source ────────────────────────────────────────
+COPY nanobot/ nanobot/
+COPY bridge/ bridge/
+COPY webui/ webui/
+
+# ── 4. Full install (triggers npm build via hatch_build.py) ───────
+RUN uv pip install --system --no-cache ".[matrix]" && \
+    uv pip install --system authlib
+
+# ── 5. Cloud platform layer ───────────────────────────────────────
+COPY deploy/cloud/platforms/     /app/deploy/cloud/platforms/
+COPY deploy/cloud/platform_setup.py /app/deploy/cloud/
+COPY deploy/cloud/entrypoint.sh     /app/
+
+# ── 6. Port binding for cloud spaces ──────────────────────────────
+RUN echo "💉 [cloud] Binding gateway to 0.0.0.0 for cloud..." && \
+    sed -i 's/config.gateway.host/"0.0.0.0"/g' nanobot/cli/commands.py && \
+    sed -i 's/host = host if host is not None else api_cfg.host/host = "0.0.0.0"/g' nanobot/cli/commands.py
+
+# ── 7. Runtime ────────────────────────────────────────────────────
+RUN chmod +x /app/entrypoint.sh
+EXPOSE 7860
+ENTRYPOINT ["/app/entrypoint.sh"]
