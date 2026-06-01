@@ -1,0 +1,39 @@
+{
+  "gateway": {
+    "host": "0.0.0.0",
+    "port": 7860
+  },
+  "agents": {
+    "defaults": {
+      "instructions": "You are a helpful AI assistant. Be concise, honest, and curious.",
+      "model": "deepseek-chat",
+      "provider": "deepseek",
+      "max_tokens": 8192,
+      "temperature": 0.7
+    }
+  },
+  "providers": {
+    "deepseek": {
+      "api_key": "${DEEPSEEK_API_KEY}",
+      "api_base": "https://api.deepseek.com"
+    },
+    "openai": {
+      "api_key": "${OPENAI_API_KEY}",
+      "api_base": "https://api.openai.com/v1"
+    }
+  },
+  "channels": {
+    "websocket": {
+      "port": 0
+    }
+  },
+  "tools": {
+    "exec": {
+      "enabled": true,
+      "allowed_env_keys": []
+    },
+    "web": {
+      "enabled": true
+    }
+  }
+}

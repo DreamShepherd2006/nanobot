@@ -35,9 +35,10 @@ RUN uv pip install --system --no-cache ".[matrix]" && \
     uv pip install --system authlib
 
 # ── 5. Cloud platform layer ───────────────────────────────────────
-COPY deploy/cloud/platforms/     /app/deploy/cloud/platforms/
-COPY deploy/cloud/platform_setup.py /app/deploy/cloud/
-COPY deploy/cloud/entrypoint.sh     /app/
+COPY deploy/cloud/platforms/          /app/deploy/cloud/platforms/
+COPY deploy/cloud/platform_setup.py   /app/deploy/cloud/
+COPY deploy/cloud/config.template.json /app/deploy/cloud/
+COPY deploy/cloud/entrypoint.sh       /app/
 
 # ── 6. Port binding for cloud spaces ──────────────────────────────
 RUN echo "💉 [cloud] Binding gateway to 0.0.0.0 for cloud..." && \
