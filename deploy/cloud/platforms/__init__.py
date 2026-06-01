@@ -28,6 +28,7 @@ PLATFORM_SPECS: tuple[PlatformSpec, ...] = (
     PlatformSpec(
         name="modelscope",
         display_name="ModelScope",
+        detect_env="MODELSCOPE_ENVIRONMENT",
         detect_env_value="studio",
         detect_url_contains="modelscope",
         module=".modelscope",
