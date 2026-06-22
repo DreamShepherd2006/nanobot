@@ -60,6 +60,10 @@ class ProviderSpec:
     # Direct providers skip API-key validation (user supplies everything)
     is_direct: bool = False
 
+    # DeepSeek needs content-as-string + keep text alongside tool_calls
+    # (other OpenAI-compat providers strip text when tool_calls are present)
+    preserve_content_with_tool_calls: bool = False
+
     # Provider supports cache_control on content blocks (e.g. Anthropic prompt caching)
     supports_prompt_caching: bool = False
 
@@ -288,6 +292,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         backend="openai_compat",
         default_api_base="https://api.deepseek.com",
         thinking_style="thinking_type",
+        preserve_content_with_tool_calls=True,
     ),
     # Gemini: Google's OpenAI-compatible endpoint
     ProviderSpec(

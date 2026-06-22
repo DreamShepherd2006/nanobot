@@ -438,7 +438,7 @@ class OpenAICompatProvider(LLMProvider):
         """Strip non-standard keys, normalize tool_call IDs."""
         sanitized = LLMProvider._sanitize_request_messages(messages, _ALLOWED_MSG_KEYS)
         id_map: dict[str, str] = {}
-        force_string_content = bool(self._spec and self._spec.name == "deepseek")
+        force_string_content = bool(self._spec and self._spec.preserve_content_with_tool_calls)
 
         def map_id(value: Any) -> Any:
             if not isinstance(value, str):
